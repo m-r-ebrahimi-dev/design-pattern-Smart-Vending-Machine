@@ -42,8 +42,6 @@ graph TD
 ### Step 1: Start the Database
 
 From the project root, start the Oracle database container.
-*(Note: It may take a minute for the database to fully initialize on first launch.)*
-
 ```bash
 docker-compose up -d
 ```
@@ -56,86 +54,167 @@ mvn spring-boot:run
 ```
 The API will be available at `http://localhost:8080`.
 
-## API Usage Demonstration
+---
 
-Let's walk through a typical interaction with the vending machine using `cURL`.
+## API & Workflow Demonstration (Exhaustive Tests)
 
-### 1. Create a New Machine
+This section provides a complete, step-by-step guide to test every possible action in every state.
 
-First, create a machine with ID `VM-01` in "Lobby" with 5 items.
+### 1. Initial Setup: Create the Machine
+
+First, create a machine with ID `VM-01` and an initial stock of 2 items. This small stock size makes it easier to test
+the `SOLD_OUT` state.
+
 ```bash
 curl -X POST http://localhost:8080/api/machines -H "Content-Type: application/json" -d \
-'{"machineId": "VM-01", "location": "Lobby", "initialStock": 5}' | jq
+'{"machineId": "VM-01", "location": "Lobby", "initialStock": 2}' | jq
 ```
-The response will show `itemCount: 5` and `stateName: "NO_COIN"`.
 
-### 2. Insert a Coin
+### 2. State-by-State Behavior Analysis
+
+Let's test each state systematically.
+
+---
+
+### ➤ State: `NO_COIN`
+
+**Description:** The machine is idle, has stock, and is waiting for a coin.
+
+**Setup:** The machine starts in this state. You can also get here after a successful purchase or by ejecting a coin.
 
 ```bash
-curl -i -X POST http://localhost:8080/api/machines/VM-01/coin
-```
-Now, check the status. The state has changed to `HAS_COIN`.
-```bash
+# To verify, check the status:
 curl http://localhost:8080/api/machines/VM-01 | jq
-# "stateName": "HAS_COIN"
+# Expected: "stateName": "NO_COIN", "itemCount": 2
 ```
 
-### 3. Try an Invalid Action
+#### ✅ Valid Actions
 
-What if we try to insert another coin?
-```bash
-curl -i -X POST http://localhost:8080/api/machines/VM-01/coin
-# HTTP/1.1 400 Bad Request
-# {"error":"You can't insert a coin now."}
-```
-The state pattern correctly prevents this.
+- **Insert a Coin:**
+  ```bash
+  curl -i -X POST http://localhost:8080/api/machines/VM-01/coin
+  # Expected: HTTP 200 OK. State transitions to HAS_COIN.
+  ```
 
-### 4. Select an Item
+#### ❌ Invalid Actions
 
-Now, let's select an item. This triggers both a state change and the internal `dispense` action.
+- **Eject a Coin:**
+  ```bash
+  curl -i -X DELETE http://localhost:8080/api/machines/VM-01/coin
+  # Expected: HTTP 400 Bad Request
+  # Response: {"error":"You can't eject a coin now."}
+  ```
+- **Select an Item:**
+  ```bash
+  curl -i -X POST http://localhost:8080/api/machines/VM-01/select
+  # Expected: HTTP 400 Bad Request
+  # Response: {"error":"You can't select an item now."}
+  ```
+
+---
+
+### ➤ State: `HAS_COIN`
+
+**Description:** A coin has been inserted. The machine is waiting for item selection or coin ejection.
+
+**Setup:** Insert a coin while in the `NO_COIN` state.
 ```bash
-curl -i -X POST http://localhost:8080/api/machines/VM-01/select
-```
-Check the status again. The machine has dispensed one item and returned to the `NO_COIN` state.
-```bash
+# Ensure you are in NO_COIN state, then:
+curl -X POST http://localhost:8080/api/machines/VM-01/coin
+# To verify, check the status:
 curl http://localhost:8080/api/machines/VM-01 | jq
-# "itemCount": 4,
-# "stateName": "NO_COIN"
+# Expected: "stateName": "HAS_COIN", "itemCount": 2
 ```
-*(If you were lucky, you might have entered the `WINNER` state and the item count would be 3!)*
 
-### 5. Deplete the Stock
+#### ✅ Valid Actions
 
-Repeat the process of inserting a coin and selecting an item 4 more times. On the last selection:
+- **Eject Coin:**
+  ```bash
+  curl -i -X DELETE http://localhost:8080/api/machines/VM-01/coin
+  # Expected: HTTP 200 OK. State returns to NO_COIN.
+  ```
+- **Select Item:**
+  ```bash
+  curl -i -X POST http://localhost:8080/api/machines/VM-01/select
+  # Expected: HTTP 200 OK.
+  # An item is dispensed, itemCount decreases by 1 (or 2 if you win!).
+  # State automatically transitions through SOLD/WINNER and ends up in NO_COIN.
+  ```
+
+#### ❌ Invalid Actions
+
+- **Insert another Coin:**
+  ```bash
+  curl -i -X POST http://localhost:8080/api/machines/VM-01/coin
+  # Expected: HTTP 400 Bad Request
+  # Response: {"error":"You can't insert a coin now."}
+  ```
+
+---
+
+### ➤ States: `SOLD` & `WINNER` (Internal/Transient)
+
+**Description:** These are not user-facing states. The machine enters them for a fraction of a second *immediately*
+after `selectItem` is called and *before* it settles back into `NO_COIN` or `SOLD_OUT`. Their purpose is to handle the
+internal logic of dispensing one or more items. You cannot directly test them with an API call, but you can observe
+their effects.
+
+**Demonstration:**
+
 ```bash
-# After the 5th item is dispensed...
+# 1. Setup: Get into HAS_COIN state with 2 items.
+# (If not already there, create a new machine or refill and insert a coin).
+
+# 2. Select an item.
+curl -X POST http://localhost:8080/api/machines/VM-01/select
+
+# 3. Observe the result.
 curl http://localhost:8080/api/machines/VM-01 | jq
-# "itemCount": 0,
-# "stateName": "SOLD_OUT"
+# Expected (Normal Sale): "itemCount": 1, "stateName": "NO_COIN"
+# Expected (Winner Sale): "itemCount": 0, "stateName": "SOLD_OUT"
 ```
 
-### 6. Try to Use a Sold-Out Machine
+---
 
-If we try to insert a coin now, it will fail.
+### ➤ State: `SOLD_OUT`
+
+**Description:** The machine is empty. No more items can be sold.
+
+**Setup:** Buy all the items from the machine.
 ```bash
-curl -i -X POST http://localhost:8080/api/machines/VM-01/coin
-# HTTP/1.1 400 Bad Request
-# {"error":"You can't insert a coin now."} - Correct! The machine is sold out.
+# 1. Create a machine with 1 item.
+curl -X POST http://localhost:8080/api/machines -H "Content-Type: application/json" -d '{"machineId":"VM-02", "location":"Test", "initialStock":1}'
+# 2. Insert coin.
+curl -X POST http://localhost:8080/api/machines/VM-02/coin
+# 3. Select item.
+curl -X POST http://localhost:8080/api/machines/VM-02/select
+# 4. To verify, check the status:
+curl http://localhost:8080/api/machines/VM-02 | jq
+# Expected: "itemCount": 0, "stateName": "SOLD_OUT"
 ```
 
-### 7. Refill the Machine
+#### ✅ Valid Actions
 
-Let's refill the machine. This action will also reset its state.
-```bash
-curl -i -X POST "http://localhost:8080/api/machines/VM-01/refill?count=10"
-```
-Check the status one last time.
-```bash
-curl http://localhost:8080/api/machines/VM-01 | jq
-# "itemCount": 10,
-# "stateName": "NO_COIN"
-```
-The machine is ready for business again!
+- **Refill the Machine:**
+  ```bash
+  curl -i -X POST "http://localhost:8080/api/machines/VM-02/refill?count=10"
+  # Expected: HTTP 200 OK. State returns to NO_COIN, and itemCount is updated.
+  ```
+
+#### ❌ Invalid Actions
+
+- **Insert a Coin:**
+  ```bash
+  curl -i -X POST http://localhost:8080/api/machines/VM-02/coin
+  # Expected: HTTP 400 Bad Request
+  # Response: {"error":"You can't insert a coin now."}
+  ```
+- **Select an Item:**
+  ```bash
+  curl -i -X POST http://localhost:8080/api/machines/VM-02/select
+  # Expected: HTTP 400 Bad Request
+  # Response: {"error":"You can't select an item now."}
+  ```
 
 ### Shutting Down
 
@@ -143,7 +222,3 @@ To stop and remove the database container, run:
 ```bash
 docker-compose down
 ```
-
-## License
-
-This project is licensed under the MIT License. See the `LICENSE` file for details.
