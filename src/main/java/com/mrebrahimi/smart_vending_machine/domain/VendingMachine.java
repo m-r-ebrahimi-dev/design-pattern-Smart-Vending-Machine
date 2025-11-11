@@ -26,6 +26,15 @@ public class VendingMachine {
     @Transient
     private MachineState currentState;
 
+    public VendingMachine() {
+    }
+
+    public VendingMachine(String machineId, String location, int initialStock) {
+        this.machineId = machineId;
+        this.location = location;
+        this.itemCount = initialStock;
+    }
+
     public void insertCoin() {
         this.currentState.insertCoin(this);
     }
