@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  oracle-db:
+    image: gvenzl/oracle-xe:21-slim-faststart
+    container_name: oracle-db-vending-machine
+    ports:
+      - "1521:1521"
+    environment:
+      - ORACLE_PASSWORD=mysecretpassword
+      - APP_USER=vending_user
+      - APP_USER_PASSWORD=vending_pass
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+
+volumes:
+  oracle-data:
