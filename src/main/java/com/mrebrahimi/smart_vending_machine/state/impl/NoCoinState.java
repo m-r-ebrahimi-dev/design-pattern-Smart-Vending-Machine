@@ -10,10 +10,9 @@ import org.springframework.stereotype.Component;
 public class NoCoinState extends BaseMachineState {
     @Override
     public void insertCoin(VendingMachine machine) {
-        System.out.println("You inserted a coin.");
+        System.out.println("STATE: NO_COIN -> HAS_COIN. Coin inserted.");
         machine.changeState(MachineStateFactory.getState(MachineStateName.HAS_COIN));
     }
-
     @Override
     public MachineStateName getStateName() {
         return MachineStateName.NO_COIN;

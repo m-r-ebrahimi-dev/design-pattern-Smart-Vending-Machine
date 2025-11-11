@@ -1,7 +1,6 @@
 package com.mrebrahimi.smart_vending_machine.domain;
 
 import com.mrebrahimi.smart_vending_machine.state.MachineState;
-import com.mrebrahimi.smart_vending_machine.state.MachineStateFactory;
 import com.mrebrahimi.smart_vending_machine.state.VendingMachineStateListener;
 import jakarta.persistence.*;
 
@@ -36,34 +35,37 @@ public class VendingMachine {
     }
 
     public void insertCoin() {
+        System.out.println("ACTION: insertCoin called.");
         this.currentState.insertCoin(this);
     }
 
     public void ejectCoin() {
+        System.out.println("ACTION: ejectCoin called.");
         this.currentState.ejectCoin(this);
     }
 
     public void selectItem() {
-        this.currentState.selectItem(this);
-        this.currentState.dispense(this);
+        System.out.println("ACTION: selectItem called.");
+        this.currentState.selectItem(this); // Transitions to SOLD or WINNER
+        this.currentState.dispense(this);   // The new state dispenses
+    }
+
+    public void refill(int count) {
+        System.out.println("ACTION: refill called with " + count + " items.");
+        this.currentState.refill(this, count);
     }
 
     public void releaseItem() {
         if (this.itemCount > 0) {
             this.itemCount--;
-            System.out.println("An item was released.");
-        }
-    }
-
-    public void refill(int count) {
-        this.itemCount += count;
-        System.out.println(count + " items added. Total: " + this.itemCount);
-        if (getStateName() == MachineStateName.SOLD_OUT && this.itemCount > 0) {
-            changeState(MachineStateFactory.getState(MachineStateName.NO_COIN));
+            System.out.println(">> Internal: Item released. Stock is now: " + this.itemCount);
+        } else {
+            System.out.println(">> Internal: Attempted to release item but stock is zero!");
         }
     }
 
     public void changeState(MachineState newState) {
+        System.out.println(">> State Changed from " + this.stateName + " to " + newState.getStateName());
         this.currentState = newState;
         this.stateName = newState.getStateName();
     }

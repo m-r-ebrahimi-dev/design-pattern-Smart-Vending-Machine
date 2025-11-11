@@ -10,15 +10,15 @@ import org.springframework.stereotype.Component;
 public class SoldState extends BaseMachineState {
     @Override
     public void dispense(VendingMachine machine) {
+        System.out.println("STATE: SOLD -> ???. Dispensing one item.");
         machine.releaseItem();
         if (machine.getItemCount() > 0) {
             machine.changeState(MachineStateFactory.getState(MachineStateName.NO_COIN));
         } else {
-            System.out.println("Oops, out of stock!");
+            System.out.println(">> Out of stock! Transitioning to SOLD_OUT state.");
             machine.changeState(MachineStateFactory.getState(MachineStateName.SOLD_OUT));
         }
     }
-
     @Override
     public MachineStateName getStateName() {
         return MachineStateName.SOLD;

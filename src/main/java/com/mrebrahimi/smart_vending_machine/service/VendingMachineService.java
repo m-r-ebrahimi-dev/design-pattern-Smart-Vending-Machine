@@ -35,14 +35,17 @@ public class VendingMachineService {
         findMachineById(machineId).selectItem();
     }
 
-    @Transactional
-    public void refillMachine(String machineId, int count) {
-        findMachineById(machineId).refill(count);
-    }
-
     @Transactional(readOnly = true)
     public VendingMachine getMachineStatus(String machineId) {
         return findMachineById(machineId);
+    }
+
+    @Transactional
+    public void refillMachine(String machineId, int count) {
+        if (count <= 0) {
+            throw new IllegalArgumentException("Refill count must be positive.");
+        }
+        findMachineById(machineId).refill(count);
     }
 
     private VendingMachine findMachineById(String machineId) {

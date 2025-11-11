@@ -6,12 +6,11 @@ import com.mrebrahimi.smart_vending_machine.domain.VendingMachine;
 
 public interface MachineState {
     void insertCoin(VendingMachine machine);
-
     void ejectCoin(VendingMachine machine);
-
     void selectItem(VendingMachine machine);
 
-    void dispense(VendingMachine machine); // Ação interna
+    void dispense(VendingMachine machine);
 
+    void refill(VendingMachine machine, int count);
     MachineStateName getStateName();
 }
